@@ -1,5 +1,6 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 #include "TankAIController.h"
+#include "TankAimingComponent.h"
 #include "Tank.h"
 #include "BattleTank.h"
 
@@ -7,39 +8,47 @@
 void ATankAIController::BeginPlay()
 {
 	Super::BeginPlay();
-
-	//auto PlayerTank = GetControlledTank();
-	//if (!PlayerTank) {
-
-	//	UE_LOG(LogTemp, Warning, TEXT("AIController not possesing a tank"));
-	//}
-	//else {
-	//	UE_LOG(LogTemp, Warning, TEXT("AIController found player: %s"), *(PlayerTank->GetName()));
-	//}
 }
 
-ATank* ATankAIController::GetControlledTank() const
+void ATankAIController::SetPawn(APawn* InPawn)
 {
-	return Cast<ATank>(GetPawn());
+	Super::SetPawn(InPawn);
+	if (InPawn)
+	{
+		auto PossessedTank = Cast<ATank>(InPawn);
+		if (!ensure(PossessedTank)) { return; }
+
+		// Subscribe our local method to the tank's death event
+		PossessedTank->OnDeath.AddUniqueDynamic(this, &ATankAIController::OnPossessedTankDeath);
+	}
 }
 
-ATank* ATankAIController::GetPlayerTank() const 
+void ATankAIController::OnPossessedTankDeath() 
 {
-	auto PlayerPawn = GetWorld()->GetFirstPlayerController()->GetPawn();
-	if (!PlayerPawn) { return nullptr; }
-	return Cast<ATank>(PlayerPawn);
+	if (!GetPawn()) { return; }
+	GetPawn()->DetachFromControllerPendingDestroy();
+	
 }
 
 void ATankAIController::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-	if (GetPlayerTank())
-	{
-		//move towards the player
 
-		//Aim towards the player
-		GetControlledTank()->AimAt(GetPlayerTank()->GetActorLocation());
-		//fire at player 
+	auto PlayerTank = GetWorld()->GetFirstPlayerController()->GetPawn();
+	auto ControlledTank = GetPawn();
+	if (!ensure(PlayerTank && ControlledTank)) { return; }
+
+	//move towards the player
+	MoveToActor(PlayerTank, AcceptanceRadius);
+
+	//Aim towards the player
+	auto AimingComponent = ControlledTank->FindComponentByClass<UTankAimingComponent>();
+	AimingComponent->AimAt(PlayerTank->GetActorLocation());
+	//fire at player 
+
+	if (AimingComponent->GetFiringState() == EFiringState::Locked)
+	{
+		AimingComponent->Fire();
 	}
 }
 
